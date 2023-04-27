@@ -80,19 +80,18 @@ for n, (key, frame) in enumerate(autoStream()):
     prevgray = gray
 
     movement = 'Sin movimiento' # por defecto
-    if len(tracks) >= 2:
+    dif = []
+    
+    if len(tracks) and len (tracks[0]) > 1:
         # Extraemos las coordenadas de los puntos de las trayectorias
-        corners_frames = [[pt for pt in track] for track in tracks]
-        x_frames = [[pt[0] for pt in frame] for frame in corners_frames]
-        y_frames = [[pt[1] for pt in frame] for frame in corners_frames]
-        # Calculamos la media de los desplazamientos en cada frame (en cada eje)
-        dx_frames = [np.mean(np.diff(frame)) for frame in x_frames]
-        dy_frames = [np.mean(np.diff(frame)) for frame in y_frames]
-        if dx_frames is None or dy_frames is None:
-            continue
-        # Estimamos la dirección del movimiento medio en cada eje
-        dx_mean = np.mean(dx_frames)
-        dy_mean = np.mean(dy_frames)
+        for t in tracks:
+            # (inicial - final) para obtener el desplazamiento en cada trayectoria
+            dif.append(np.subtract(t[0], t[-1]))
+        
+        # calculamos desplaamiento medio en cada eje
+        dx_mean = np.mean([d[0] for d in dif])
+        dy_mean = np.mean([d[1] for d in dif])
+
         if np.isnan(dx_mean) or np.isnan(dx_mean):
             movement = 'Sin movimiento'
             continue
@@ -111,8 +110,6 @@ for n, (key, frame) in enumerate(autoStream()):
         # dibujamos la dirección del movimiento como un vector desde el centro de la imagen
         h, w = frame.shape[:2]
         # se normaliza el vector de dirección y se escalan sus componentes para que se vea
-
-        print(f'{movement} {dx_mean:.2f} {dy_mean:.2f}')
 
         # suponemos el vector medio de desplazamiento en el origen de coordenadas
         # (para hacer cálculos con el modelo pinhole de la cámara)
@@ -135,15 +132,12 @@ for n, (key, frame) in enumerate(autoStream()):
         # velocidad angular en grados / frame
         angVel = angle / track_len
 
-        
 
-        # con la información de la cámara, calculamos el ángulo de giro
-        # usamos una de las trayectorias, tomando el primer y el último punto
-        # (el primero es el más antiguo, el último el más reciente)
-        # y calculamos el ángulo de giro entre ellos
 
         # dibujamos el ángulo de giro
-        cv.putText(frame, f'{angle:.2f} deg.', (10, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv.LINE_AA)
+        putText(frame, f'{angle:.2f} deg.', orig = (5, 40))
+        # dibujamos la velocidad angular
+        putText(frame, f'{angVel:.2f} deg./frame', orig = (5, 60))
 
         
 

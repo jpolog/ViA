@@ -22,7 +22,6 @@ def getAngle(img, p1, p2):
         # Vector in the 3D space
         p1 = np.append(points[0], focal_length) - C
         p2 = np.append(points[1], focal_length) - C
-        print(f"p1: {p1}, p2: {p2}")
         # Calculate the angle using the dot product (producto escalar)
         angle = np.arccos(np.dot(p1, p2) / (np.linalg.norm(p1) * np.linalg.norm(p2)))
         # in degrees
