@@ -22,9 +22,12 @@ from umucv.htrans   import htrans, Pose
 from umucv.util     import cube, showAxes
 from umucv.contours import extractContours, redu
 
+
+test = True
+
 # states of the cube
 class State:
-    STILL, MOVING = range(2)
+    STILL, FINDING, MOVING = range(3)
 
 # cube
 SPEED = 0.5
@@ -42,16 +45,31 @@ class Cube:
     @staticmethod
     def detectPath(img):
 
-        global static
+        global static, test
+
+        cv.imshow('img', img)
 
         # diferenca entre la imagen actual y el modelo estatico
         diff = cv.absdiff(img, static)
         # threshold
         _, diff = cv.threshold(diff, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+
+        cv.imshow('diff', diff)
         # extraemos los contornos, debe haber solo uno (el nuevo camino dibujado)
-        cs = extractContours(diff, minarea=5, reduprec=2)
+        cs = extractContours(img, minarea=1, minredon=0, reduprec=0, approx=True)
+        
+
         if len(cs):
-            good = redu(cs[0], 2)
+            if test:
+                good = redu(cs, 2)
+                #draw contours
+                cont = np.zeros(img.shape, np.uint8)
+                cv.drawContours(cont, good, -1, (128,128,255),1)
+                cv.imshow('cont', cont)
+                
+
+            
+
             static = img
         else:
             return None
@@ -138,31 +156,6 @@ def binarize(img):
     return gray
 
 
-
-# Detecta la ruta dibujada en la imagen
-def detectPath(img, static):
-
-    # binarizamos
-    static = binarize(static)
-    img = binarize(img)
-    # diferenca entre la imagen actual y el modelo estatico
-    diff = cv.absdiff(img, static)
-    # threshold
-    _, diff = cv.threshold(diff, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    # extraemos los contornos, debe haber solo uno (el nuevo camino dibujado)
-    cs = extractContours(diff, minarea=5, reduprec=2)
-    good = redu(cs[0], 2)
-
-    if good:
-        static = img
-
-    return good
-
-
-def drawPath(img, path):
-    cv.drawContours(img, [path], -1, (0,0,255), 3, cv.LINE_AA)
-    return img
-
     
 # Buffer de los últimos 30 frames tras binarize y threshold
 skip = 3
@@ -208,23 +201,26 @@ for n, (key,frame) in enumerate(stream):
         #cosa = cube * (0.5,0.5,0.75 + 0.5*np.sin(n/100)) + (0.25,0.25,0)
         #cv.drawContours(frame, [ htrans(M, cosa).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
 
-        # calculamos diferencia en los últimos 30 frames
-        #media de las diferencias entre los últimos 30 frames
-        # si la media es muy baja, es que no se está en proceso de dibujar
-        # una ruta
-        mean = np.mean(buf, axis=(0,1))
-        print(mean)
-        diff = cv.absdiff(gray, mean)
+        # comparamos el frame actual con el más antiguo del buffer
+        # para saber si se está dibujando un nuevo camino
+        diff1 = cv.absdiff(gray, buf[0]).mean()
+        diff2 = cv.absdiff(gray, buf[len(buf)//2]).mean()
+        diff = (diff1 + diff2) / 2
+
+        if key == ord('c'):
+            cube.state = State.FINDING
         
 
-        if cube.state == State.STILL:
+        if cube.state == State.FINDING:
+            #print("detecting path")
             good = cube.detectPath(gray)
             if good is not None:
                 cube.path = good
-                cube.state = State.MOVING
+                #cube.state = State.MOVING
                 cube.drawPath(frame, good)
 
         
 
     cv.imshow('source',frame)
+    cv.imshow('static',static)
     
