@@ -13,6 +13,7 @@
 
 # o con la webcam poniéndolo en el teléfono o el monitor.
 
+from collections import deque
 import cv2          as cv
 import numpy        as np
 
@@ -35,6 +36,34 @@ class Cube:
         self.state = state
         self.speed = SPEED
         self.path = [] # queue of points to follow
+
+
+    # Detecta la ruta dibujada en la imagen
+    @staticmethod
+    def detectPath(img):
+
+        global static
+
+        # diferenca entre la imagen actual y el modelo estatico
+        diff = cv.absdiff(img, static)
+        # threshold
+        _, diff = cv.threshold(diff, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+        # extraemos los contornos, debe haber solo uno (el nuevo camino dibujado)
+        cs = extractContours(diff, minarea=5, reduprec=2)
+        if len(cs):
+            good = redu(cs[0], 2)
+            static = img
+        else:
+            return None
+            
+        return good
+
+    @staticmethod
+    def drawPath(img, path):
+        cv.drawContours(img, [path], -1, (0,0,255), 3, cv.LINE_AA)
+        return img
+
+
 
     def draw(self, frame):
         ### ARREGLAR
@@ -103,13 +132,12 @@ def bestPose(K,view,model):
 # Funciones para seguir la ruta ######
 ######################################
 
-def binarize(gray):
-    _, r = cv.threshold(gray, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-    return r
+def binarize(img):
+    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    _, gray = cv.threshold(gray, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+    return gray
 
 
-# Buffer de los últimos 30 frames tras binarize y threshold
-skip = 3
 
 # Detecta la ruta dibujada en la imagen
 def detectPath(img, static):
@@ -125,6 +153,9 @@ def detectPath(img, static):
     cs = extractContours(diff, minarea=5, reduprec=2)
     good = redu(cs[0], 2)
 
+    if good:
+        static = img
+
     return good
 
 
@@ -133,6 +164,9 @@ def drawPath(img, path):
     return img
 
     
+# Buffer de los últimos 30 frames tras binarize y threshold
+skip = 3
+buf = deque(maxlen=10)
 
 
 
@@ -141,8 +175,11 @@ static = None
 for n, (key,frame) in enumerate(stream):
 
     gray = binarize(frame)
+    buf.append(gray)
+
     if static is None:
         static = gray
+
     cs = extractContours(gray, minarea=5, reduprec=2)
 
     good = polygons(cs,6,3)
@@ -162,17 +199,30 @@ for n, (key,frame) in enumerate(stream):
         # cv.drawContours(frame,[htrans(M,marker).astype(int)], -1, (0,0,0) , 3, cv.LINE_AA)
 
         # creamos el cubo en la posición del marcador
-        cube = Cube(0.2, htrans(M, (0.5,0.5,0)), State.MOVING)
+        cube = Cube(0.2, htrans(M, (0.5,0.5,0)), State.STILL, M)
 
         # Mostramos el sistema de referencia inducido por el marcador (es una utilidad de umucv)
         showAxes(frame, M, scale=0.5)
 
         # hacemos que se mueva el cubo
-        cosa = cube * (0.5,0.5,0.75 + 0.5*np.sin(n/100)) + (0.25,0.25,0)
-        cv.drawContours(frame, [ htrans(M, cosa).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
+        #cosa = cube * (0.5,0.5,0.75 + 0.5*np.sin(n/100)) + (0.25,0.25,0)
+        #cv.drawContours(frame, [ htrans(M, cosa).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
 
+        # calculamos diferencia en los últimos 30 frames
+        #media de las diferencias entre los últimos 30 frames
+        # si la media es muy baja, es que no se está en proceso de dibujar
+        # una ruta
+        mean = np.mean(buf, axis=(0,1))
+        print(mean)
+        diff = cv.absdiff(gray, mean)
+        
 
-        detectPath(frame,gray)
+        if cube.state == State.STILL:
+            good = cube.detectPath(gray)
+            if good is not None:
+                cube.path = good
+                cube.state = State.MOVING
+                cube.drawPath(frame, good)
 
         
 
