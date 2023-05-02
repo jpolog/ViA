@@ -108,8 +108,7 @@ for key, frame in autoStream():
             print(f'model {bestModel} with {len(bestMatches)} matches')
 
         # no hay un modelo lo suficientemente bueno
-        elif state == State.MATCH:
-            cv.destroyWindow('model')
+        elif state == State.READ:
             state = State.IDLE
 
         
