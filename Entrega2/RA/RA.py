@@ -54,11 +54,12 @@ class Cube:
     def __init__(self, size, pos, state, pose):
         self.size = size
         # homogeneous coordinates
-        self.position = np.array([pos[0], pos[1], 1])   # coordenadas homogeneas en el plano real para realizar los calculos
+        self.position = np.array([pos[0], pos[1]])   # coordenadas real del marcador
         self.pose = pose # matrix to transform from 3D to 2D
         self.state = state
         self.speed = SPEED
-        self.path = [] # queue of points to follow
+        # empty array of points
+        self.path = np.empty((0,2), dtype=int)
         self.corners = np.array([[0,0,0],
                                  [1,0,0],
                                  [1,1,0],
@@ -111,7 +112,10 @@ class Cube:
             else: # se ha parado de dibujar el camino ---> Camino fijo
                 self.state = State.FOUND
                 # se almacena el track más largo como la trayectoria transformado a coordenadas reales
-                self.path = htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)
+                if len(self.path) == 0:
+                    self.path = htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)
+                else:
+                    self.path = np.concatenate((self.path,htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)[len(self.path):]))
                 
             # dibujamos las trayectorias
             cv.polylines(frame, [ np.int32(t) for t in tracks ], isClosed=False, color=(0,0,255))
@@ -167,10 +171,10 @@ class Cube:
     def move(self):
         if self.state == State.MOVING:
             if len(self.path) > skip:
-                self.position = np.vstack([self.path[0][0], self.path[0][1], 1])
+                self.position = [self.path[0][0], self.path[0][1]]
                 self.path = self.path[skip:]
             elif len(self.path) > 0:
-                self.position = np.vstack([self.path[-1][0], self.path[-1][1], 1])
+                self.position = [self.path[-1][0], self.path[-1][1]]
                 self.path = []
             else:
                 self.state = State.STILL
@@ -179,16 +183,13 @@ class Cube:
 
 
     def draw(self, frame):
-        # move corners depending on cube position using homogeneous coordinates
-        T = np.eye(4)
-        T[:3,3:4] = np.vstack([self.position[0], self.position[1], 0]) # we move 0 in z axis
-        # corners to homogeneous coordinates
-        corners = np.vstack([self.corners, [1,1,1]])
-        print(corners)
+        cornersToPrint = np.array([c+[self.position[0], self.position[1],0] for c in self.corners])
         # transform
-        corners = np.array(np.dot(T, corners)[:3]).astype(np.int32)
-        print(corners)
-        cv.drawContours(frame, [ htrans(self.pose, corners).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
+        pts = htrans(M, cornersToPrint).astype(int)
+        print(pts)
+        pts = np.array(pts).astype(int)
+        #print(pts)
+        cv.drawContours(frame, [[0,0]]], -1, (0,128,0), 3, cv.LINE_AA)
 
 
 
@@ -324,7 +325,8 @@ for n, (key,frame) in enumerate(stream):
         if cube.state == State.MOVING:
             cube.move()
             cube.draw(frame)
-            cv.polylines(frame, [cube.path], False, (0,255,0), 3, cv.LINE_AA)
+            print("moving")
+            cv.waitKey(0)
 
 
 
