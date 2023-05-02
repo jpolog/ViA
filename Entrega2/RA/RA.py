@@ -115,7 +115,8 @@ class Cube:
                 if len(self.path) == 0:
                     self.path = htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)
                 else:
-                    self.path = np.concatenate((self.path,htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)[len(self.path):]))
+                    followingPath = htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)[len(self.path):]
+                    self.path = np.concatenate((self.path,followingPath))
                 
             # dibujamos las trayectorias
             cv.polylines(frame, [ np.int32(t) for t in tracks ], isClosed=False, color=(0,0,255))
@@ -189,7 +190,9 @@ class Cube:
         print(pts)
         pts = np.array(pts).astype(int)
         #print(pts)
-        cv.drawContours(frame, [[0,0]]], -1, (0,128,0), 3, cv.LINE_AA)
+        cv.drawContours(framecopy, [pts], -1, (0,128,0), 3, cv.LINE_AA)
+        cv.imshow("framecopy", framecopy)
+        
 
 
 
@@ -277,57 +280,45 @@ for n, (key,frame) in enumerate(stream):
         if p.rms < 2:
             poses += [p.M]
 
-    # dejar solamente la mejor pose??
-    for M in poses:
+    M = poses[0] # la mejor pose
 
-        # capturamos el color de un punto cerca del marcador para borrarlo
-        # dibujando un cuadrado encima
-        x,y = htrans(M, (0.7,0.7,0) ).astype(int)
-        b,g,r = frame[y,x].astype(int)
-        cv.drawContours(frame,[htrans(M,square*1.1+(-0.05,-0.05,0)).astype(int)], -1, (int(b),int(g),int(r)) , -1, cv.LINE_AA)
-        # cv.drawContours(frame,[htrans(M,marker).astype(int)], -1, (0,0,0) , 3, cv.LINE_AA)
-
-        if cube is None:
-            # creamos el cubo en la posición del marcador
-            cube = Cube(0.2, [0.5,0.5,0], State.STILL, M)
-
-        # Mostramos el sistema de referencia inducido por el marcador (es una utilidad de umucv)
-        showAxes(frame, M, scale=0.5)
-
-        # hacemos que se mueva el cubo
-        #cosa = cube * (0.5,0.5,0.75 + 0.5*np.sin(n/100)) + (0.25,0.25,0)
-        #cv.drawContours(frame, [ htrans(M, cosa).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
-
-        # comparamos el frame actual con el más antiguo del buffer
-        # para saber si se está dibujando un nuevo camino
-        diff1 = cv.absdiff(gray, buf[0]).mean()
-        diff2 = cv.absdiff(gray, buf[len(buf)//2]).mean()
-        diff = (diff1 + diff2) / 2
-
-        if key == ord('c'):
-            cube.state = State.FINDING
-
-        if key == ord('v'):
-            cube.state = State.FOUND
-        
-
-        if cube.state == State.FINDING or cube.state == State.FOUND:
-            #print("detecting path")
-            cube.detectPath()
-            if cube.state == State.FOUND:
-                cube.drawPath(frame)
-                #cube.state = State.MOVING
-                #cube.drawPath(frame, good)
-
-        if key == ord('m'):
+    # capturamos el color de un punto cerca del marcador para borrarlo
+    # dibujando un cuadrado encima
+    x,y = htrans(M, (0.7,0.7,0) ).astype(int)
+    b,g,r = frame[y,x].astype(int)
+    cv.drawContours(frame,[htrans(M,square*1.1+(-0.05,-0.05,0)).astype(int)], -1, (int(b),int(g),int(r)) , -1, cv.LINE_AA)
+    # cv.drawContours(frame,[htrans(M,marker).astype(int)], -1, (0,0,0) , 3, cv.LINE_AA)
+    if cube is None:
+        # creamos el cubo en la posición del marcador
+        cube = Cube(0.2, [0.5,0.5,0], State.STILL, M)
+    # Mostramos el sistema de referencia inducido por el marcador (es una utilidad de umucv)
+    showAxes(frame, M, scale=0.5)
+    # hacemos que se mueva el cubo
+    #cosa = cube * (0.5,0.5,0.75 + 0.5*np.sin(n/100)) + (0.25,0.25,0)
+    #cv.drawContours(frame, [ htrans(M, cosa).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
+    # comparamos el frame actual con el más antiguo del buffer
+    # para saber si se está dibujando un nuevo camino
+    diff1 = cv.absdiff(gray, buf[0]).mean()
+    diff2 = cv.absdiff(gray, buf[len(buf)//2]).mean()
+    diff = (diff1 + diff2) / 2
+    if key == ord('c'):
+        cube.state = State.FINDING
+    if key == ord('v'):
+        cube.state = State.FOUND
+    
+    if cube.state == State.FINDING or cube.state == State.FOUND:
+        #print("detecting path")
+        cube.detectPath()
+        if cube.state == State.FOUND:
+            cube.drawPath(frame)
             cube.state = State.MOVING
-
-        if cube.state == State.MOVING:
-            cube.move()
-            cube.draw(frame)
-            print("moving")
-            cv.waitKey(0)
-
+            #cube.drawPath(frame, good)
+    if key == ord('m'):
+        cube.state = State.MOVING
+    if cube.state == State.MOVING:
+        cube.move()
+        cube.draw(frame)
+        print("moving")
 
 
     prevgray = gray
