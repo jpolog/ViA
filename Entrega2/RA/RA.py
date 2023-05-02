@@ -19,80 +19,178 @@ import numpy        as np
 
 from umucv.stream   import autoStream
 from umucv.htrans   import htrans, Pose
-from umucv.util     import cube, showAxes
+from umucv.util     import showAxes
 from umucv.contours import extractContours, redu
 
 
 test = True
 
+
+
+# Detecta la ruta dibujada en la imagen
+tracks = []
+track_len = 300
+detect_interval = 10
+corners_params = dict( maxCorners = 500,
+                    qualityLevel= 0.1,
+                    minDistance = 10,
+                    blockSize = 7)
+lk_params = dict( winSize  = (15, 15),
+                maxLevel = 2,
+                criteria = (cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 0.03))
+first = True
+
+
+
+
+
 # states of the cube
 class State:
-    STILL, FINDING, MOVING = range(3)
+    STILL, FINDING, FOUND, MOVING = range(4)
 
 # cube
 SPEED = 0.5
 class Cube:
-    def __init__(self, size, pos, state, perspective):
+    def __init__(self, size, pos, state, pose):
         self.size = size
-        self.pos = pos
-        self.perspective = perspective
+        # homogeneous coordinates
+        self.position = np.array([pos[0], pos[1], 1])
+        self.pose = pose # matrix to transform from 3D to 2D
         self.state = state
         self.speed = SPEED
         self.path = [] # queue of points to follow
+        self.tracks = [] # queue of points to follow
+        self.corners = np.array([[0,0,0],
+                                 [1,0,0],
+                                 [1,1,0],
+                                 [0,1,0],
+                                 [0,0,0],
+                                 
+                                 [0,0,1],
+                                 [1,0,1],
+                                 [1,1,1],
+                                 [0,1,1],
+                                 [0,0,1],
+                                     
+                                 [1,0,1],
+                                 [1,0,0],
+                                 [1,1,0],
+                                 [1,1,1],
+                                 [0,1,1],
+                                 [0,1,0]
+                                 ])
 
 
-    # Detecta la ruta dibujada en la imagen
-    @staticmethod
-    def detectPath(img):
 
-        global static, test
 
-        cv.imshow('img', img)
-
-        # diferenca entre la imagen actual y el modelo estatico
-        diff = cv.absdiff(img, static)
-        # threshold
-        _, diff = cv.threshold(diff, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
-
-        cv.imshow('diff', diff)
-        # extraemos los contornos, debe haber solo uno (el nuevo camino dibujado)
-        cs = extractContours(img, minarea=1, minredon=0, reduprec=0, approx=True)
-        
-
-        if len(cs):
-            if test:
-                good = redu(cs, 2)
-                #draw contours
-                cont = np.zeros(img.shape, np.uint8)
-                cv.drawContours(cont, good, -1, (128,128,255),1)
-                cv.imshow('cont', cont)
+    def detectPath(self,img):
+        global tracks, track_len, detect_interval, corners_params, lk_params, first
+        if len(tracks):
+                
+            # el criterio para considerar bueno un punto siguiente es que si lo proyectamos
+            # hacia el pasado, vuelva muy cerca del punto incial, es decir:
+            # "back-tracking for match verification between frames"
+            p0 = np.float32( [t[-1] for t in tracks] )
+            p1,  _, _ =  cv.calcOpticalFlowPyrLK(prevgray, gray, p0, None, **lk_params)
+            p0r, _, _ =  cv.calcOpticalFlowPyrLK(gray, prevgray, p1, None, **lk_params)
+            d = abs(p0-p0r).reshape(-1,2).max(axis=1)
+            good = d < 1
+            
+            new_tracks = []
+            for t, (x,y), ok in zip(tracks, p1.reshape(-1,2), good):
+                if not ok:
+                    continue
+                if np.linalg.norm(np.array([x,y])-t[-1]) < 1:
+                    continue
+                t.append( [x,y] )
+                if len(t) > track_len:
+                    del t[0]
+                new_tracks.append(t)
+                
+            if len(new_tracks) > 0:
+                tracks = new_tracks
+            else:
+                self.state = State.FOUND
+                self.path = np.int32(tracks[0])
+                #dibuja la trayectoria
+                cv.polylines(frame,[self.path],  isClosed=False, color=(0,255,0))
                 
 
-            
 
-            static = img
-        else:
-            return None
+            # dibujamos las trayectorias
+            cv.polylines(frame, [ np.int32(t) for t in tracks ], isClosed=False, color=(0,0,255))
+            for t in tracks:
+                x,y = np.int32(t[-1])
+                cv.circle(frame, (x, y), 2, (0, 0, 255), -1)
+   
+
+        
+        # resetear el tracking
+        if self.state == State.FINDING:
             
-        return good
+            # Creamos una máscara para indicar al detector de puntos nuevos las zona
+            # permitida, que es EL CUADRADO CENTRAL, quitando círculos alrededor de los puntos
+            # existentes (los últimos de las trayectorias).
+            # cuadrado central 50x50 en el centro de la imagen
+            mask = np.zeros_like(gray)
+            h,w = gray.shape
+            # roi
+            x1,x2,y1,y2 = h//2-25,h//2+25,w//2-25,w//2+25
+            mask[x1:x2,y1:y2]= 255
+
+            # print the roi
+            cv.rectangle(frame, (y1,x1), (y2,x2), (0,255,0), 2)
+
+            for x,y in [np.int32(t[-1]) for t in tracks]:
+                # Estamos machacando con 0 en el radio de 5 alrededor de cada punto actual
+                # para que no se repita ---> Buscar puntos en otra zona
+                cv.circle(mask, (x,y), 5, 0, -1)
+            corners = cv.goodFeaturesToTrack(gray, mask=mask, **corners_params)
+            if corners is not None:
+                for [(x, y)] in np.float32(corners):
+                    tracks.append( [  [ x,y ]  ] )
+
+            if len(tracks):
+                # comprobamos si el punto está fuera del roi
+                if tracks[0][-1][0] < y1 or tracks[0][-1][0] > y2 or tracks[0][-1][1] < x1 or tracks[0][-1][1] > x2:
+                    first = False
+        
+            
+            return tracks
+
+        
 
     @staticmethod
     def drawPath(img, path):
         cv.drawContours(img, [path], -1, (0,0,255), 3, cv.LINE_AA)
         return img
 
+    def move(self):
+        if self.state == State.MOVING:
+            if len(self.path) > skip:
+                self.position = np.vstack([self.path[0][0], self.path[0][1], 1])
+                self.path = self.path[skip:]
+            elif len(self.path) > 0:
+                self.position = np.vstack([self.path[-1][0], self.path[-1][1], 1])
+                self.path = []
+            else:
+                self.state = State.STILL
+
+        print(self.position)
 
 
     def draw(self, frame):
-        ### ARREGLAR
-        cv.drawContours(frame, [cube(self.size, self.pos, self.perspective)], -1, (0,0,255), 2)
+        # move corners depending on position using homogeneous coordinates
+        M = np.eye(4)
+        M[:2,3] = self.position
+        M = M.transpose()
+        # to homogeneous coordinates
+        corners = np.vstack((corners, np.ones((1, corners.shape[1]))))
+        # transform
+        corners = np.dot(M, corners)
+        I = np.linalg.inv(self.pose) # inverse pose transform
+        cv.drawContours(frame, [ htrans(I, corners).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
 
-    def move(self):
-        if self.state == State.MOVING:
-            if len(self.path) > 0:
-                self.pos = self.path.pop(0)
-            else:
-                self.state = State.STILL
 
 
 
@@ -149,7 +247,7 @@ def bestPose(K,view,model):
 ######################################
 # Funciones para seguir la ruta ######
 ######################################
-
+sigma = 1 # gaussian blur
 def binarize(img):
     gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
     _, gray = cv.threshold(gray, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
@@ -163,15 +261,12 @@ buf = deque(maxlen=10)
 
 
 
-static = None
-
+cube = None
 for n, (key,frame) in enumerate(stream):
 
     gray = binarize(frame)
     buf.append(gray)
 
-    if static is None:
-        static = gray
 
     cs = extractContours(gray, minarea=5, reduprec=2)
 
@@ -182,6 +277,7 @@ for n, (key,frame) in enumerate(stream):
         if p.rms < 2:
             poses += [p.M]
 
+    # dejar solamente la mejor pose??
     for M in poses:
 
         # capturamos el color de un punto cerca del marcador para borrarlo
@@ -191,8 +287,9 @@ for n, (key,frame) in enumerate(stream):
         cv.drawContours(frame,[htrans(M,square*1.1+(-0.05,-0.05,0)).astype(int)], -1, (int(b),int(g),int(r)) , -1, cv.LINE_AA)
         # cv.drawContours(frame,[htrans(M,marker).astype(int)], -1, (0,0,0) , 3, cv.LINE_AA)
 
-        # creamos el cubo en la posición del marcador
-        cube = Cube(0.2, htrans(M, (0.5,0.5,0)), State.STILL, M)
+        if cube is None:
+            # creamos el cubo en la posición del marcador
+            cube = Cube(0.2, [0.5,0.5,0], State.STILL, M)
 
         # Mostramos el sistema de referencia inducido por el marcador (es una utilidad de umucv)
         showAxes(frame, M, scale=0.5)
@@ -209,18 +306,32 @@ for n, (key,frame) in enumerate(stream):
 
         if key == ord('c'):
             cube.state = State.FINDING
+
+        if key == ord('v'):
+            cube.state = State.FOUND
         
 
-        if cube.state == State.FINDING:
+        if cube.state == State.FINDING or cube.state == State.FOUND:
             #print("detecting path")
-            good = cube.detectPath(gray)
-            if good is not None:
-                cube.path = good
+            cube.detectPath(gray)
+            if len(cube.path):
+                # draw path
+                cv.polylines(frame, [cube.path], False, (0,255,0), 3, cv.LINE_AA)
                 #cube.state = State.MOVING
-                cube.drawPath(frame, good)
+                #cube.drawPath(frame, good)
 
-        
+        if key == ord('m'):
+            cube.state = State.MOVING
+
+        if cube.state == State.MOVING:
+            cube.move()
+            cube.draw(frame)
+            cv.polylines(frame, [cube.path], False, (0,255,0), 3, cv.LINE_AA)
+
+
+
+    prevgray = gray
 
     cv.imshow('source',frame)
-    cv.imshow('static',static)
+
     
