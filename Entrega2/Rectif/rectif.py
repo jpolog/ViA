@@ -37,6 +37,9 @@ def mouse_callback(event, x, y, flags, numPts):
 # calcula la distancia real entre dos puntos de referencia
 # a partir de la distancia entre los dos primeros puntos
 # y la distancia entre los dos primeros puntos en la imagen
+#   · d: distancia real entre los dos primeros puntos
+#   · mPtsReal: puntos marcados en el mundo real
+#   · refPtsReal: puntos de referencia en el mundo real
 def calculateRealDist(d, mPtsReal, refPtsReal):
     refDistReal = dist(refPtsReal[0],refPtsReal[1])
     mDistReal = dist(mPtsReal[0],mPtsReal[1])
