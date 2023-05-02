@@ -54,12 +54,11 @@ class Cube:
     def __init__(self, size, pos, state, pose):
         self.size = size
         # homogeneous coordinates
-        self.position = np.array([pos[0], pos[1], 1])
+        self.position = np.array([pos[0], pos[1], 1])   # coordenadas homogeneas en el plano real para realizar los calculos
         self.pose = pose # matrix to transform from 3D to 2D
         self.state = state
         self.speed = SPEED
         self.path = [] # queue of points to follow
-        self.tracks = [] # queue of points to follow
         self.corners = np.array([[0,0,0],
                                  [1,0,0],
                                  [1,1,0],
@@ -83,7 +82,7 @@ class Cube:
 
 
 
-    def detectPath(self,img):
+    def detectPath(self):
         global tracks, track_len, detect_interval, corners_params, lk_params, first
         if len(tracks):
                 
@@ -109,14 +108,11 @@ class Cube:
                 
             if len(new_tracks) > 0:
                 tracks = new_tracks
-            else:
+            else: # se ha parado de dibujar el camino ---> Camino fijo
                 self.state = State.FOUND
-                self.path = np.int32(tracks[0])
-                #dibuja la trayectoria
-                cv.polylines(frame,[self.path],  isClosed=False, color=(0,255,0))
+                # se almacena el track más largo como la trayectoria transformado a coordenadas reales
+                self.path = htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)
                 
-
-
             # dibujamos las trayectorias
             cv.polylines(frame, [ np.int32(t) for t in tracks ], isClosed=False, color=(0,0,255))
             for t in tracks:
@@ -158,12 +154,15 @@ class Cube:
             
             return tracks
 
-        
+    
 
-    @staticmethod
-    def drawPath(img, path):
-        cv.drawContours(img, [path], -1, (0,0,255), 3, cv.LINE_AA)
-        return img
+    def drawPath(self,img):
+        # delete the z coordinate of the pose matrix
+        hom = np.delete(self.pose, 2, 1)
+        I = np.linalg.inv(hom)
+        imgPath = np.int32(htrans(I, self.path))
+        cv.polylines(img, [imgPath], isClosed=False, color=(0,255,0), thickness=3)
+            
 
     def move(self):
         if self.state == State.MOVING:
@@ -180,16 +179,16 @@ class Cube:
 
 
     def draw(self, frame):
-        # move corners depending on position using homogeneous coordinates
-        M = np.eye(4)
-        M[:2,3] = self.position
-        M = M.transpose()
-        # to homogeneous coordinates
-        corners = np.vstack((corners, np.ones((1, corners.shape[1]))))
+        # move corners depending on cube position using homogeneous coordinates
+        T = np.eye(4)
+        T[:3,3:4] = np.vstack([self.position[0], self.position[1], 0]) # we move 0 in z axis
+        # corners to homogeneous coordinates
+        corners = np.vstack([self.corners, [1,1,1]])
+        print(corners)
         # transform
-        corners = np.dot(M, corners)
-        I = np.linalg.inv(self.pose) # inverse pose transform
-        cv.drawContours(frame, [ htrans(I, corners).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
+        corners = np.array(np.dot(T, corners)[:3]).astype(np.int32)
+        print(corners)
+        cv.drawContours(frame, [ htrans(self.pose, corners).astype(int) ], -1, (0,128,0), 3, cv.LINE_AA)
 
 
 
@@ -313,10 +312,9 @@ for n, (key,frame) in enumerate(stream):
 
         if cube.state == State.FINDING or cube.state == State.FOUND:
             #print("detecting path")
-            cube.detectPath(gray)
-            if len(cube.path):
-                # draw path
-                cv.polylines(frame, [cube.path], False, (0,255,0), 3, cv.LINE_AA)
+            cube.detectPath()
+            if cube.state == State.FOUND:
+                cube.drawPath(frame)
                 #cube.state = State.MOVING
                 #cube.drawPath(frame, good)
 

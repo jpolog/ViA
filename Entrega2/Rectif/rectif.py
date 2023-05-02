@@ -1,6 +1,6 @@
 import cv2 as cv
 import numpy as np
-from umucv.htrans import htrans, desp, scale
+from umucv.htrans import htrans
 from umucv.stream import autoStream
 from collections import deque
 
