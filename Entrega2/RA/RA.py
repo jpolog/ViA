@@ -30,7 +30,7 @@ test = True
 # Detecta la ruta dibujada en la imagen
 tracks = []
 track_len = 300
-detect_interval = 10
+detect_interval = 20
 corners_params = dict( maxCorners = 500,
                     qualityLevel= 0.1,
                     minDistance = 10,
@@ -112,10 +112,17 @@ class Cube:
             else: # se ha parado de dibujar el camino ---> Camino fijo
                 self.state = State.FOUND
                 # se almacena el track más largo como la trayectoria transformado a coordenadas reales
+                hom = np.delete(self.pose, 2, 1)
+                I = np.linalg.inv(hom)
+                track = tracks[0][len(self.path):]
                 if len(self.path) == 0:
-                    self.path = htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)
-                else:
-                    followingPath = htrans(self.pose,[[p[0],p[1],0] for p in tracks[0]]).astype(int)[len(self.path):]
+                    self.path = htrans(I,[p for p in track])
+                    print("firstPath",self.path)
+                elif len(track) > 20:
+                    test = [p for p in track]
+                    print("test",test)
+                    followingPath = htrans(I,test)
+                    print("followingPath",followingPath)
                     self.path = np.concatenate((self.path,followingPath))
                 
             # dibujamos las trayectorias
@@ -163,9 +170,8 @@ class Cube:
 
     def drawPath(self,img):
         # delete the z coordinate of the pose matrix
-        hom = np.delete(self.pose, 2, 1)
-        I = np.linalg.inv(hom)
-        imgPath = np.int32(htrans(I, self.path))
+        H = np.delete(self.pose, 2, 1)
+        imgPath = np.int32(htrans(H, self.path))
         cv.polylines(img, [imgPath], isClosed=False, color=(0,255,0), thickness=3)
             
 
@@ -187,11 +193,10 @@ class Cube:
         cornersToPrint = np.array([c+[self.position[0], self.position[1],0] for c in self.corners])
         # transform
         pts = htrans(M, cornersToPrint).astype(int)
-        print(pts)
+        #print(pts)
         pts = np.array(pts).astype(int)
         #print(pts)
-        cv.drawContours(framecopy, [pts], -1, (0,128,0), 3, cv.LINE_AA)
-        cv.imshow("framecopy", framecopy)
+        cv.drawContours(frame, [pts], -1, (0,128,0), 3, cv.LINE_AA)
         
 
 
@@ -311,7 +316,7 @@ for n, (key,frame) in enumerate(stream):
         cube.detectPath()
         if cube.state == State.FOUND:
             cube.drawPath(frame)
-            cube.state = State.MOVING
+            #cube.state = State.MOVING
             #cube.drawPath(frame, good)
     if key == ord('m'):
         cube.state = State.MOVING
