@@ -6,47 +6,72 @@ from umucv.stream import autoStream
 import numpy as np
 from numpy.fft import fft
 
+# if last arg is advanced ---> activate advanced mode
+advanced = len(os.sys.argv) > 1 and os.sys.argv[-1] == '--advanced'
+
+
 IMG_DIR_PATH = './models'
 
 #######################################################################
 ####################  EXTRAER LOS CONTORNOS  ##########################
 #######################################################################
 
-def binarize(gray):
-    _, r = cv.threshold(gray, 128, 255, cv.THRESH_BINARY+cv.THRESH_OTSU)
+def binarize_white(gray):
+    _, r = cv.threshold(gray, 200, 255, cv.THRESH_BINARY)
     return r
-    
-def extractContours(image):
+
+def binarize_black(gray):
+    _, r = cv.threshold(gray, 70, 255, cv.THRESH_BINARY)
+    return r
+
+SIGMA = [0.03]
+cv.namedWindow('matricula')
+if advanced:
+    cv.createTrackbar('Blur', 'matricula', int(SIGMA[0]*100), 500, lambda v: SIGMA.insert(0,v/100))
+def extractContours(image, black=True):
     g = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    #gauss
+    g = cv.GaussianBlur(g, (0,0), SIGMA[0])
+
+    cv.imshow('g_b', g)
+     
+
     if black:
-        g = 255-g
-    b = binarize(g)  
-    cv.imshow('binarize', b)
+        b = 255-g
+        b = binarize_black(b)
+        cv.imshow('b_b', b)
+    else:
+        b = binarize_white(g)
     contours, _ = cv.findContours(b.copy(), cv.RETR_CCOMP, cv.CHAIN_APPROX_NONE)
     contours = [ c.reshape(-1,2) for c in contours ]
     contours = sorted(contours, key=cv.contourArea, reverse=True)
     return contours
 
 
+
+
 # Varía en función de las diemensiones de la imagen con la que se trabaje
 def razonable(c, image):
-    return (image.shape[0]*image.shape[1])*0.95 >= cv.contourArea(c) >= 0.0004*(image.shape[0]*image.shape[1])
+    return (image.shape[0]*image.shape[1])*0.95 >= cv.contourArea(c) >= 0.008*(image.shape[0]*image.shape[1])
 
 
 def orientation(x):
     return cv.contourArea(x.astype(np.float32),oriented=True) >= 0
 
 # para elegir si mostramos la imagen original o todos los contornos
-black = True
 shcont = True
 
 def redu(c, eps=0.5):
     red = cv.approxPolyDP(c,eps,True)
     return red.reshape(-1,2)
 
-def polygons(cs,prec=2):
+def polygons(cs,n,prec=2):
     rs = [ redu(c,prec) for c in cs ]
-    return rs
+    sq = []
+    for r in rs:
+        if len(r) == n:
+            sq.append(r)
+    return sq
 
 
 #######################################################################
@@ -62,7 +87,6 @@ def createModels():
     files = os.listdir(IMG_DIR_PATH)
     # ordenamos alfabéticamente
     files.sort()
-    print("files: ",files)
     for filename in files:
         if filename.endswith(".png"):
             img = cv.imread(os.path.join(IMG_DIR_PATH, filename))
@@ -103,8 +127,13 @@ def invar(c, wmax=10):
 
 # Diferentes umbrales para el reconocimiento de los números
 # y las letras
-MAXDIST_NUM = 0.04
-MAXDIST_ALPHA = 0.1
+MAXDIST_NUM = [0.08]
+MAXDIST_ALPHA = [0.1]
+#trackbar para cada valor
+if advanced:
+    cv.createTrackbar('Umbral Números', 'matricula', int(MAXDIST_NUM[0]*1000), 400, lambda v: MAXDIST_NUM.insert(0,v/1000))
+    cv.createTrackbar('Umbral Letras', 'matricula', int(MAXDIST_ALPHA[0]*100), 50, lambda v: MAXDIST_ALPHA.insert(0,v/100))
+
 
 # como el invariante del 6 y del 9 son muy parecidos
 # (asumimimos que el 6 es un 9 rotado)
@@ -165,22 +194,23 @@ def identifySymbols(contours,alphaModels,numberModels):
     invmodel = [0]*10
     for i in range(len(numberModels)):
         invmodel[i] = invar(numberModels[i])
-        
-    for c in contours[:4]:
+    
+    for i in range(len(contours[:4])):
+        c = contours[i]
         # show contour
-        cv.imshow('contour actual', cv.drawContours(img.copy(), [c], -1, (0,255,0), 1))
         for m in range(len(numberModels)):
             invmodel = invar(numberModels[m])
-            cv.imshow('model', cv.drawContours(img.copy(), [numberModels[m]], -1, (0,255,0), 1))
+            #cv.waitKey(0)
 
-            if np.linalg.norm(invar(c)-invmodel) < MAXDIST_NUM:
-                if m == 5 or m == 8:
-                    number = is_6_or_9(c) -1
+            if np.linalg.norm(invar(c)-invmodel) < MAXDIST_NUM[0]:
+                if m == 6 or m == 9:
+                    number = is_6_or_9(c)
                     if m != number: # ha detectado un 6 como 9 o viceversa
                         continue
                 # se registra el número
+                
                 numbers.append(m)
-                cv.waitKey(0)
+                break
 
     invmodel = [0]*20
     # identificar las letras
@@ -191,10 +221,11 @@ def identifySymbols(contours,alphaModels,numberModels):
         for m in range(len(alphaModels)):
             invmodel = invar(alphaModels[m])
 
-            if np.linalg.norm(invar(c)-invmodel) < MAXDIST_ALPHA:
+            if np.linalg.norm(invar(c)-invmodel) < MAXDIST_ALPHA[0]:
                 letter = getAlpha(m)
                 # se registra la letra
                 alpha.append(letter)
+                break
         
     if len(numbers) != 4 or len(alpha) != 3:
         print('No se ha identificado una matrícula válida')
@@ -202,37 +233,51 @@ def identifySymbols(contours,alphaModels,numberModels):
     else:
         return numbers + alpha
     
+
+
+cv.namedWindow("matricula")
+
+
 contours = []
 borders = []
 border = None
+found = False
+plate = []
 ## Programa principal
 for (key,frame) in autoStream():
     #1. abrir la imagen
     img = frame.copy()
     #2. extraer los contornos
-    contours = extractContours(frame)
+    borders = extractContours(frame, black=False)
+    # seleccionamos contornos BLANCOS de tamaño razonable 
+    borders = [c for c in borders if razonable(c,img) and not orientation(c) ]
+    # precisión alta para que se quede solamente el recuadro blanco
+    borders = polygons(borders,4,35)
+    if len(borders) == 0:
+        continue
+    # nos quedamos con el más pequeño
+    border = borders[-1]
+    #recortamos la imagen al tamaño del borde (ROI)
+    x,y,w,h = cv.boundingRect(border)
+    img = img[y:y+h,x:x+w]
+    contours = extractContours(img)
     # seleccionamos contornos OSCUROS de tamaño razonable
     contours = [c for c in contours if razonable(c,img) and not orientation(c) ]
-    borders = [c for c in contours if razonable(c,img) and orientation(c) ]
-    if len(borders) != 0:
-        borders = polygons(border)
-
-        for b in borders:
-            if len(borders) == 4:
-                border = b
-    
-    if border is not None:
-        #detectamos los contornos dentro del borde
-        contours = [c for c in contours if cv.pointPolygonTest(border, tuple(c[0]), False) >= 0]
-
-    
-        
-
-    cv.imshow('contours', cv.drawContours(img.copy(), contours, -1, (0,255,0), 1))
-    #show contours
-    #cv.waitKey(0)
+    # si se ha detectado el rectángulo con la letra del país
+    # se elimina de los contornos
+    if len(contours) > 7:
+        contours = contours[1:]
+    b = np.zeros_like(img, dtype=np.uint8)
+    cv.imshow('contours', cv.drawContours(b, contours, -1, (0,255,0), 1))
     #3. identificar los símbolos
     symbols = identifySymbols(contours,alphaModels,numberModels)
 
     if symbols is not None:
-        print("Matrícula: ", symbols)
+        if symbols != plate:
+            found = False
+        if not found:
+            print("Matrícula: ", symbols)
+            plate = symbols
+            found = True
+
+    cv.imshow('matricula', cv.drawContours(img.copy(), contours, -1, (0,255,0), 1))
