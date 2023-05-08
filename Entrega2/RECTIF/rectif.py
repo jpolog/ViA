@@ -17,9 +17,15 @@ def readRef(filename):
     f = open(filename,'r')
     d = float(f.readline())
     refPts = []
+    imgPts = []
+    i = 1
     for line in f:
-        refPts.append([int(x) for x in line.split(',')])
-    return d, refPts
+        if i%2 == 0:
+            imgPts.append([int(x) for x in line.split(',')])
+        else:
+            refPts.append([int(float(x)) for x in line.split(',')])
+        i += 1
+    return d, refPts, imgPts
 
 
 # Detecta el evento de click del ratón
@@ -81,20 +87,8 @@ for (key,frame) in autoStream():
     cv.imshow('original',img)
 
     # lee los puntos de referencia
-    d, refPts = readRef('ref.txt')
+    d, refPts,imgPts = readRef('ref.txt')
     
-    # imgPts es np array de puntos de la imagen
-    # que se van rellenando con los clicks del ratón
-    imgPts = []
-
-
-    # espera a que se marquen los puntos de referencia
-    cv.setMouseCallback('original', mouse_callback, len(refPts))
-    while len(imgPts) < len(refPts):
-        cv.waitKey(1)
-        # muestra la imagen
-        cv.imshow('original',img)
-        continue
 
     # matrices de puntos en np array
     imgPts = np.array(imgPts)

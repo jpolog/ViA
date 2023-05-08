@@ -105,7 +105,7 @@ def get_camera_position(p1,p2,p3,c):
     print('m1: ',m1)
     print('m2: ',m2)
     print('d1: ',d1)
-    print('d2: ',d2)
+    print('d2: ',d2)    
     print('a1 (deg): ',a1*180/np.pi)
     print('a2 (deg): ',a2*180/np.pi)
     print('c1: ',c1)
