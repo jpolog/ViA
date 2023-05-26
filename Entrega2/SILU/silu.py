@@ -180,10 +180,10 @@ def identifySymbols(contours,alphaModels,numberModels):
         contours = sorted(contours, key=lambda x: cv.boundingRect(x)[1])
         # los 4 primeros contornos (arriba) son los números
         # se ordenan de izquierda a derecha
-        numbers = sorted(contours[:4], key=lambda x: cv.boundingRect(x)[0])
+        contours[:4] = sorted(contours[:4], key=lambda x: cv.boundingRect(x)[0])
         # los 3 últimos contornos (abajo) son las letras
         # se ordenan de izquierda a derecha
-        alpha = sorted(contours[4:], key=lambda x: cv.boundingRect(x)[0])
+        contours[4:] = sorted(contours[4:], key=lambda x: cv.boundingRect(x)[0])
     else:
         # se ordenan de izquierda a derecha
         contours = sorted(contours, key=lambda x: cv.boundingRect(x)[0])
@@ -201,16 +201,25 @@ def identifySymbols(contours,alphaModels,numberModels):
         for m in range(len(numberModels)):
             invmodel = invar(numberModels[m])
             #cv.waitKey(0)
-
-            if np.linalg.norm(invar(c)-invmodel) < MAXDIST_NUM[0]:
+            diff = np.linalg.norm(invar(c)-invmodel)
+            if  diff < MAXDIST_NUM[0]:
                 if m == 6 or m == 9:
                     number = is_6_or_9(c)
                     if m != number: # ha detectado un 6 como 9 o viceversa
                         continue
-                # se registra el número
-                
-                numbers.append(m)
-                break
+                elif m == 0: # evitar que se detecte un 8 como un 0 (como el 0 va primero, ya no sigue buscando)
+                    invmodel = invar(numberModels[8])
+                    newDiff = np.linalg.norm(invar(c)-invmodel)
+                    if newDiff < diff:
+                        numbers.append(8)
+                        break
+                    else:
+                        numbers.append(m)
+                        break
+                else:
+                    # se registra el número
+                    numbers.append(m)
+                    break
 
     invmodel = [0]*20
     # identificar las letras
@@ -223,6 +232,13 @@ def identifySymbols(contours,alphaModels,numberModels):
 
             if np.linalg.norm(invar(c)-invmodel) < MAXDIST_ALPHA[0]:
                 letter = getAlpha(m)
+                # algunos casos requieren más precisión
+                if letter == 'J' or letter == 'L':
+                    if np.linalg.norm(invar(c)-invmodel) < 0.025:
+                        alpha.append(letter)
+                        break
+                    else:
+                        continue
                 # se registra la letra
                 alpha.append(letter)
                 break

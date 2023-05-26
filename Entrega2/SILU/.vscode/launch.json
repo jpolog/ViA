@@ -9,7 +9,7 @@
             "type": "python",
             "request": "launch",
             "program": "${file}",
-            "args": ["--dev", "dir:./ejemplo2.jpeg"],
+            "args": ["--dev", "dir:./ejemplo4.jpg"],
             "console": "integratedTerminal",
             "justMyCode": true
         }

@@ -1,8 +1,8 @@
 import numpy as np
 import cv2   as cv
 
-
-def get_image_dimensions_points_and_angle(img_path):
+# Calculates the angle between two points and the camera projected in the y=dims[0]/2 plane
+def get_image_points_and_2Dangles(img_path):
     # Store the points
     points = []
 
@@ -41,14 +41,21 @@ def get_image_dimensions_points_and_angle(img_path):
     # The camera is assumed to be parallel to the image plane
 
 
-    # Calculate the angle between the two points
+    # Calculate the angle between the two points projected in the y=dims[0]/2 plane
     angle = None
     if len(points) == 3:
-        # The two points are converted to 3D points by appending the focal length of the camera and subtracting the camera center
+        # The points are converted to 3D points by appending the focal length of the camera and subtracting the camera center
+        # and then projected in the y=dims[0]/2 plane to calculate the 2D angle
+
         # Vector in the 3D space
         p1 = np.append(points[0], focal_length) - C
         p2 = np.append(points[1], focal_length) - C
         p3 = np.append(points[2], focal_length) - C
+        # project in the y=dims[0]/2 plane
+        p1[1] = dims[0]/2
+        p2[1] = dims[0]/2
+        p3[1] = dims[0]/2
+
         print(f"p1: {p1}\np2: {p2}\np3: {p3}")
         # Calculate the angle using the dot product (producto escalar)
         angle1 = np.arccos(np.dot(p1, p2) / (np.linalg.norm(p1) * np.linalg.norm(p2)))
@@ -56,10 +63,11 @@ def get_image_dimensions_points_and_angle(img_path):
         # in degrees
         angle1 = angle1 * 180 / np.pi
         angle2 = angle2 * 180 / np.pi
+        angles = [angle1,angle2]
         print(f"Angle1: {angle1}º")
         print(f"Angle2: {angle2}º")
 
     cv.destroyAllWindows()
 
-    return dims, points, angle
+    return points, angles
 
