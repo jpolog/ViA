@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 
 import numpy as np
-import cv2   as cv
-from anglesFunction import get_image_dimensions_points_and_angle
+import matplotlib.pyplot as plt
 import math
+
+from getPoints import getPoints
+
+imagePath = 'locate.jpg'
 
 # calculate projection in y=0 plane
 def get_projection(points):
@@ -42,7 +45,7 @@ def get_center(p1,p2, angle):
     # get midpoint
     m = get_midpoint(p1,p2)
     # from midpoint, go down by r*cos(angle/2)
-    return np.array([m[0],m[1]+r*np.cos(angle)])
+    return np.array([m[0],m[1]-r*np.cos(angle)])
 
 def get_intersections(x0, y0, r0, x1, y1, r1):
     # circle 1: (x0, y0), radius r0
@@ -73,9 +76,11 @@ def get_intersections(x0, y0, r0, x1, y1, r1):
         return ([x3, y3], [x4, y4])
 
 # calculate the camera position
-def get_camera_position(p1,p2,p3,c):
+def get_camera_position(image):
+    points,dims = getPoints(image)
     # calculate projection in y=0 plane
-    p1,p2,p3,c = get_projection([p1,p2,p3,c])
+    points = get_projection(points)
+    p1,p2,p3,c = points[0],points[1],points[2],points[3]
     # calculate midpoint of points in pairs
     m1 = get_midpoint(p1,p2)
     m2 = get_midpoint(p2,p3)
@@ -114,8 +119,39 @@ def get_camera_position(p1,p2,p3,c):
     print('circle2: ',circle2)
     print('intersections: ',intersections)
 
+    # represent the points and circles in a plot of dimensions enough to see all the elements
+    
+    fig, ax = plt.subplots()
+    ax.set_aspect(1)
+    ax.add_artist(plt.Circle((circle1[0], circle1[1]), circle1[2], color='r', fill=False))
+    ax.add_artist(plt.Circle((circle2[0], circle2[1]), circle2[2], color='b', fill=False))
+    ax.plot([p1[0],p2[0],p3[0],c[0]],[p1[1],p2[1],p3[1],c[1]],'ro')
+    ax.plot([m1[0],m2[0]],[m1[1],m2[1]],'bo')
+    ax.plot([c1[0],c2[0]],[c1[1],c2[1]],'go')
+    
 
-get_camera_position(np.array([-10,16.57,-10]),np.array([2.77,11.43,-10]),np.array([13.29,16.63,-10]),np.array([0,15,15]))
+    # label the points and circles
+    ax.annotate('p1', (p1[0],p1[1]))
+    ax.annotate('p2', (p2[0],p2[1]))
+    ax.annotate('p3', (p3[0],p3[1]))
+    ax.annotate('c', (c[0],c[1]))
+    ax.annotate('m1', (m1[0],m1[1]))
+    ax.annotate('m2', (m2[0],m2[1]))
+    ax.annotate('c1', (c1[0],c1[1]))
+    ax.annotate('c2', (c2[0],c2[1]))
+    
+    # set the limits of the plot
+    ax.set_xlim([-dims[1]*1/2,dims[1]*3/2])
+    ax.set_ylim([-p1[1]/3,p1[1]*3/2])
+
+
+    plt.show()
+    
+
+
+
+# Main execution
+get_camera_position(imagePath)
 
 
 

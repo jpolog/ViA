@@ -41,8 +41,8 @@ def get_image_points_and_2Dangles(img_path):
     # The camera is assumed to be parallel to the image plane
 
 
-    # Calculate the angle between the two points projected in the y=dims[0]/2 plane
-    angle = None
+    # Calculate the angle between the two points projected in the y=dims[0]/2 plane and the camera
+    # do it for the 2 pairs of points
     if len(points) == 3:
         # The points are converted to 3D points by appending the focal length of the camera and subtracting the camera center
         # and then projected in the y=dims[0]/2 plane to calculate the 2D angle
@@ -55,6 +55,8 @@ def get_image_points_and_2Dangles(img_path):
         p1[1] = dims[0]/2
         p2[1] = dims[0]/2
         p3[1] = dims[0]/2
+
+        points = [p1,p2,p3,C]
 
         print(f"p1: {p1}\np2: {p2}\np3: {p3}")
         # Calculate the angle using the dot product (producto escalar)
