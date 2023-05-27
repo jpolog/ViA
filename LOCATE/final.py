@@ -7,7 +7,9 @@ import math
 
 from getPoints import getPoints
 
-imagePath = 'locate.jpg'
+imagePath = 'example.jpg'
+# para el ejemplo teórico ejecutar con:
+# ./locateCam.py 15,30 35,45 40,35 36.39 19.42
 
 #get points from args and the angles 
 # the format is x1,y1 x2,y2 x3,y3 a1 a2
@@ -47,30 +49,35 @@ def get_angle(points, ref):
     
 
 
-# get radius of circle from two points and angle of the arc between them
-def get_radius(p1,p2, angle):
+# get distance from the midpoint of two points to the center of the circle
+def get_d_from_center(p1,p2, angle):
     d = get_distance(p1,p2)
     return (d/2)/np.sin(angle)
-    #return np.sqrt(1/4*((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)*(1/np.sin(angle/2))**2)
 
 # get center of the circle from two points and angle of the arc between them
+# easy scenario: the points are aligned in a straight line
 def get_center_image(p1,p2, angle):
     # get radius
-    r = get_radius(p1,p2, angle)
+    r = get_d_from_center(p1,p2, angle)
     # get midpoint
     m = get_midpoint(p1,p2)
-    # from midpoint, go down by r*cos(angle/2)
+    # from midpoint, go down by r*cos(angle)
     return np.array([m[0],m[1]-r*np.cos(angle)])
 
+# general case: the points are not aligned 
 def get_center_manual(p1,p2, angle):
-    # get radius
-    r = get_radius(p1,p2, angle)
-    # get midpoint
-    m = get_midpoint(p1,p2)
-    # from midpoint, go perpendicular to the segment joining the points by r*cos(angle/2) distance
-    dx = p1[0]-p2[0]
-    dy = p1[1]-p2[1]
-    return np.array([m[0]+r*(-dx)*np.cos(angle),m[1]+r*(-dy)*np.cos(angle)])
+    # Get midpoint
+    m = get_midpoint(p1, p2)
+    # Calculate the perpendicular distance from the midpoint to the segment
+    dx = p1[0] - p2[0]
+    dy = p1[1] - p2[1]
+    d = get_d_from_center(p1, p2, angle) * math.cos(angle)
+    # Calculate the angle bisector
+    bisector_angle = math.atan2(dy, dx) + math.pi / 2
+    # Calculate the coordinates of the center point
+    center_x = m[0] + d * math.cos(bisector_angle)
+    center_y = m[1] + d * math.sin(bisector_angle)
+    return np.array([center_x, center_y])
 
 def get_intersections(x0, y0, r0, x1, y1, r1):
     # circle 1: (x0, y0), radius r0
@@ -120,17 +127,20 @@ def get_camera_position_image(points):
     o2 = get_center_image(p2,p3,a2)
 
     # Circle 1 defined by o1 and r1
-    circle1 = (o1[0],o1[1],get_radius(p1,p2,a1))
+    circle1 = (o1[0],o1[1],get_d_from_center(p1,p2,a1))
     # Circle 2 defined by o2 and r2
-    circle2 = (o2[0],o2[1],get_radius(p2,p3,a2))
+    circle2 = (o2[0],o2[1],get_d_from_center(p2,p3,a2))
 
     # get intersections of the two circles
     intersections = get_intersections(circle1[0],circle1[1],circle1[2],circle2[0],circle2[1],circle2[2])
     if intersections is None:
         sys.exit(1)
         
-    # get intersection with coordinate 0<y<y(p1)
-    c = intersections[0] if intersections[0][1] <= p1[1] else intersections[1]
+    # get intersection that is different from p2
+    if get_distance(intersections[0],p2) > get_distance(intersections[1],p2):
+        c = intersections[0]
+    else:
+        c = intersections[1]
 
     return [p1,p2,p3,c], [m1,m2], [d1,d2], [a1,a2], [o1,o2], [circle1, circle2], intersections
 
@@ -149,17 +159,20 @@ def get_camera_position_manual(points,angles):
     o2 = get_center_manual(p2,p3,a2)
 
     # Circle 1 defined by o1 and r1
-    circle1 = (o1[0],o1[1],get_radius(p1,p2,a1))
+    circle1 = (o1[0],o1[1],get_d_from_center(p1,p2,a1))
     # Circle 2 defined by o2 and r2
-    circle2 = (o2[0],o2[1],get_radius(p2,p3,a2))
+    circle2 = (o2[0],o2[1],get_d_from_center(p2,p3,a2))
 
     # get intersections of the two circles
     intersections = get_intersections(circle1[0],circle1[1],circle1[2],circle2[0],circle2[1],circle2[2])
     if intersections is None:
         sys.exit(1)
 
-    # get intersection closest to camera
-    c = intersections[0] if get_distance(intersections[0],p2) < get_distance(intersections[1],p2) else intersections[1]
+    # get intersection that is different from p2
+    if get_distance(intersections[0],p2) > get_distance(intersections[1],p2):
+        c = intersections[0]
+    else:
+        c = intersections[1]
 
     return [p1,p2,p3,c], [m1,m2], [d1,d2], [a1,a2], [o1,o2], [circle1, circle2], intersections
     
@@ -195,7 +208,8 @@ def show_results(points, midpoints, distances, angles, centers, circles, interse
     ax.set_aspect(1)
     ax.add_artist(plt.Circle((circle1[0], circle1[1]), circle1[2], color='r', fill=False))
     ax.add_artist(plt.Circle((circle2[0], circle2[1]), circle2[2], color='b', fill=False))
-    ax.plot([p1[0],p2[0],p3[0],c[0]],[p1[1],p2[1],p3[1],c[1]],'ro')
+    ax.plot([p1[0],p2[0],p3[0]],[p1[1],p2[1],p3[1]],'ro')
+    ax.plot(c[0],c[1],'mo')
     ax.plot([m1[0],m2[0]],[m1[1],m2[1]],'bo')
     ax.plot([o1[0],o2[0]],[o1[1],o2[1]],'go')
     
