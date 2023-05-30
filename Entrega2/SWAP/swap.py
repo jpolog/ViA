@@ -2,7 +2,7 @@ import cv2 as cv
 import numpy as np
 from umucv.htrans import htrans
 from umucv.stream import autoStream
-from collections import deque
+
 
 numPts = 4
 numPtsReg= 0
@@ -49,7 +49,11 @@ def rectify(img, H):
 
 print('\nstarting program\n')
 for (key,frame) in autoStream():
-    img = frame
+    img  = frame.copy() # los puntos se dibujan sobre esta imagen
+    img2 = frame.copy() # la imagen rectificada se muestra en esta
+
+
+    
     cv.imshow('original',img)
 
     # espera a que se marquen los puntos de referencia
@@ -76,21 +80,21 @@ for (key,frame) in autoStream():
     IH = np.linalg.inv(H)
 
     # rectificamos el cuadrado C1 al plano de C2
-    C1Rectified = rectify(img, H)
+    C1Rectified = rectify(img2, H)
     # y nos quedamos solo con la máscara de C2
     C1Rectified = C1Rectified[mC2>0]
     # rectificamos el cuadrado C2 al plano de C1
-    C2Rectified = rectify(img, IH)
+    C2Rectified = rectify(img2, IH)
     # y nos quedamos solo con la máscara de C1
     C2Rectified = C2Rectified[mC1>0]
 
     # muestra la imagen original sustituyendo los cuadrados por los rectificados
-    imgSwapped = img.copy()
+    imgSwapped = img2.copy()
     imgSwapped[mC2>0] = C1Rectified
     imgSwapped[mC1>0] = C2Rectified
     
     # muestra la imagen original y la intercambiada
-    cv.imshow('original',img)
+    cv.imshow('original',frame)
     cv.imshow('swapped',imgSwapped)
 
     # espera a que se pulse una tecla

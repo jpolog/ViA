@@ -33,13 +33,11 @@ def extractContours(image, black=True):
     #gauss
     g = cv.GaussianBlur(g, (0,0), SIGMA[0])
 
-    cv.imshow('g_b', g)
      
 
     if black:
         b = 255-g
         b = binarize_black(b)
-        cv.imshow('b_b', b)
     else:
         b = binarize_white(g)
     contours, _ = cv.findContours(b.copy(), cv.RETR_CCOMP, cv.CHAIN_APPROX_NONE)

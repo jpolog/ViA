@@ -57,11 +57,11 @@ def get_d_from_center(p1,p2, angle):
 # get center of the circle from two points and angle of the arc between them
 def get_center_image(p1,p2, angle):
     # get radius
-    r = get_d_from_center(p1,p2, angle)
+    d = get_d_from_center(p1,p2, angle)
     # get midpoint
     m = get_midpoint(p1,p2)
     # from midpoint, go down by r*cos(angle)
-    return np.array([m[0],m[1]-r*np.cos(angle)])
+    return np.array([m[0],m[1]-d*np.cos(angle)])
 
 def get_center_manual(p1,p2, angle):
     # Get midpoint
@@ -206,7 +206,8 @@ def show_results(points, midpoints, distances, angles, centers, circles, interse
     ax.set_aspect(1)
     ax.add_artist(plt.Circle((circle1[0], circle1[1]), circle1[2], color='r', fill=False))
     ax.add_artist(plt.Circle((circle2[0], circle2[1]), circle2[2], color='b', fill=False))
-    ax.plot([p1[0],p2[0],p3[0],c[0]],[p1[1],p2[1],p3[1],c[1]],'ro')
+    ax.plot([p1[0],p2[0],p3[0]],[p1[1],p2[1],p3[1]],'ro')
+    ax.plot(c[0],c[1],'mo')
     ax.plot([m1[0],m2[0]],[m1[1],m2[1]],'bo')
     ax.plot([o1[0],o2[0]],[o1[1],o2[1]],'go')
     

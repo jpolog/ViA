@@ -101,7 +101,8 @@ for (key,frame) in autoStream():
 
     # rectifica la imagen
     imgRect = rectify(img, H)
-    
+    # muestra la imagen rectificada
+    cv.imshow('rectified',imgRect)
 
     # medición de distancias
     mPtsImg = deque(maxlen=2)
@@ -127,8 +128,9 @@ for (key,frame) in autoStream():
     print('Real distance: %f' % dReal)
 
     
-    # muestra la imagen original
+    # muestra la imagen original y la rectificada
     cv.imshow('original',img)
+    cv.imshow('rectified',imgRect)
 
     # espera a que se pulse una tecla
     cv.waitKey(0)

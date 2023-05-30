@@ -364,8 +364,11 @@ for (key,frame) in autoStream():
         scaleFactor = 500
         T = desp([100,100]) @ scale([scaleFactor,scaleFactor]) @ H
 
-        # rectificamos450
+        # rectificamos
         rectif = cv.warpPerspective(frame, T, (800,800))
+
+        # dibujamos el resultado
+        #cv.imshow('rectified_not_solved', rectif)
 
         # calculamos la transformación inversa        
         IH = np.linalg.inv(T)
@@ -422,7 +425,7 @@ for (key,frame) in autoStream():
     cv.drawContours(rectif_crop_cont, contour_numbers, -1, (128,255,128), 1)
 
     #image show
-    cv.imshow('rectif_crop_cont2', rectif_crop_cont)
+    #cv.imshow('rectif_crop_cont2', rectif_crop_cont)
     
 
     _, inside, numbers_inside = findSudokuContours(None, quad_interior, contour_numbers, mode=1)
