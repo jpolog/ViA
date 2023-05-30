@@ -1,5 +1,17 @@
 #!/usr/bin/env python
 
+# estimación de pose a partir del marcador images/ref.png
+# En esta versión el objeto virtual se mueve.
+
+# pruébalo con el vídeo de siempre
+
+# ./pose2.py --dev=../../images/rot4.mjpg
+
+# con la imagen de prueba
+
+# ./pose2.py --dev=dir:../../images/marker.png
+
+# o con la webcam poniéndolo en el teléfono o el monitor.
 
 from collections import deque
 import cv2          as cv
@@ -30,13 +42,14 @@ first = True
 
 
 
-MOV_DELAY = 10  # se mueve 1 de cada 10 frames
+
 
 # states of the cube
 class State:
     STILL, FINDING, FOUND, MOVING = range(4)
 
 # cube
+SPEED = 0.5
 class Cube:
     def __init__(self, size, pos, state, pose):
         self.size = size
@@ -44,7 +57,7 @@ class Cube:
         self.position = np.array([pos[0], pos[1]])   # coordenadas real del marcador
         self.pose = pose # matrix to transform from 3D to 2D
         self.state = state
-        self.motion = 0
+        self.speed = SPEED
         # empty array of points
         self.path = np.empty((0,2), dtype=int)
         self.corners = np.array([[0,0,0],
@@ -124,15 +137,16 @@ class Cube:
         if self.state == State.FINDING:
             
             # Creamos una máscara para indicar al detector de puntos nuevos las zona
-            # permitida, que es EL CUADRADO abajo a la izquierda, quitando círculos alrededor de los puntos
+            # permitida, que es EL CUADRADO CENTRAL, quitando círculos alrededor de los puntos
             # existentes (los últimos de las trayectorias).
             # cuadrado central 50x50 en el centro de la imagen
             mask = np.zeros_like(gray)
             h,w = gray.shape
             # roi
-            x1,x2,y1,y2 = h//3-25,h//3+25,2*w//3-25,2*w//3+25
+            x1,x2,y1,y2 = h//2-25,h//2+25,w//2-25,w//2+25
+            mask[x1:x2,y1:y2]= 255
 
-            
+            # print the roi
             cv.rectangle(frame, (y1,x1), (y2,x2), (0,255,0), 2)
 
             for x,y in [np.int32(t[-1]) for t in tracks]:
@@ -163,17 +177,14 @@ class Cube:
 
     def move(self):
         if self.state == State.MOVING:
-            if self.motion == MOV_DELAY:
-                if len(self.path) > skip:
-                    self.position = [self.path[0][0], self.path[0][1]]
-                    self.path = self.path[skip:]
-                elif len(self.path) > 0:
-                    self.position = [self.path[-1][0], self.path[-1][1]]
-                    self.path = []
-                else:
-                    self.state = State.STILL
+            if len(self.path) > skip:
+                self.position = [self.path[0][0], self.path[0][1]]
+                self.path = self.path[skip:]
+            elif len(self.path) > 0:
+                self.position = [self.path[-1][0], self.path[-1][1]]
+                self.path = []
             else:
-                self.motion += 1
+                self.state = State.STILL
 
         print(self.position)
 
@@ -274,11 +285,7 @@ for n, (key,frame) in enumerate(stream):
         if p.rms < 2:
             poses += [p.M]
 
-    if len(poses):
-        M = poses[0] # la mejor pose
-    else:
-        cv.imshow('source',frame)
-        continue
+    M = poses[0] # la mejor pose
 
     # capturamos el color de un punto cerca del marcador para borrarlo
     # dibujando un cuadrado encima
@@ -289,8 +296,6 @@ for n, (key,frame) in enumerate(stream):
     if cube is None:
         # creamos el cubo en la posición del marcador
         cube = Cube(0.2, [0.5,0.5,0], State.STILL, M)
-    else:
-        cube.pose = M
     # Mostramos el sistema de referencia inducido por el marcador (es una utilidad de umucv)
     showAxes(frame, M, scale=0.5)
     # hacemos que se mueva el cubo
@@ -301,40 +306,28 @@ for n, (key,frame) in enumerate(stream):
     diff1 = cv.absdiff(gray, buf[0]).mean()
     diff2 = cv.absdiff(gray, buf[len(buf)//2]).mean()
     diff = (diff1 + diff2) / 2
-    
-    #controles manuales
     if key == ord('c'):
         cube.state = State.FINDING
     if key == ord('v'):
         cube.state = State.FOUND
-    if key == ord('m'):
-        cube.state = State.MOVING
     
-    # Acciones según el estado del cubo
-    if cube.state == State.STILL:
-        
-        print("still")
-    elif cube.state == State.FINDING:
+    if cube.state == State.FINDING or cube.state == State.FOUND:
         #print("detecting path")
         cube.detectPath()
-
-    elif cube.state == State.FOUND:
-        cube.drawPath(frame)
-        #cube.state = State.MOVING
-        #cube.drawPath(frame, good)
-        if cube.motion == 2*MOV_DELAY:
-            cube.state = State.MOVING
-            cube.motion = 0
-
-    elif cube.state == State.MOVING:
+        if cube.state == State.FOUND:
+            cube.drawPath(frame)
+            #cube.state = State.MOVING
+            #cube.drawPath(frame, good)
+    if key == ord('m'):
+        cube.state = State.MOVING
+    if cube.state == State.MOVING:
         cube.move()
-    
+        cube.draw(frame)
         print("moving")
 
 
     prevgray = gray
 
-    cube.draw(frame)
     cv.imshow('source',frame)
 
     
